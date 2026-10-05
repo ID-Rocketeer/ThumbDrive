@@ -15,21 +15,59 @@ import sys
 DEFAULT_WIN_BAT = """@echo off
 title ThumbDrive Audio Player
 cd /d "%~dp0"
-start "" "server_bin\\server_win.exe"
+
+if exist "server_bin\\server_win.exe" (
+    start "" "server_bin\\server_win.exe"
+) else if exist "thumbdrive_runner.py" (
+    echo [ThumbDrive] Executable server_bin\\server_win.exe not found.
+    echo [ThumbDrive] Launching python thumbdrive_runner.py fallback...
+    python thumbdrive_runner.py
+) else (
+    echo.
+    echo ===================================================================
+    echo ERROR: 'server_bin\\server_win.exe' was not found!
+    echo ===================================================================
+    echo Please ensure you have downloaded the compiled executables into
+    echo server_bin\\ or assembled the drive using package_thumbdrive.py.
+    echo.
+    pause
+)
 """
 
 DEFAULT_MAC_COMMAND = """#!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
-chmod +x ./server_bin/server_mac
-./server_bin/server_mac &
+
+if [ -f "./server_bin/server_mac" ]; then
+    chmod +x ./server_bin/server_mac
+    ./server_bin/server_mac &
+elif [ -f "./thumbdrive_runner.py" ]; then
+    echo "[ThumbDrive] Launching python thumbdrive_runner.py..."
+    python3 ./thumbdrive_runner.py
+else
+    echo "==================================================================="
+    echo "ERROR: ./server_bin/server_mac was not found!"
+    echo "==================================================================="
+    read -p "Press Enter to exit..."
+fi
 """
 
 DEFAULT_LINUX_SH = """#!/bin/bash
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR"
-chmod +x ./server_bin/server_linux
-./server_bin/server_linux &
+
+if [ -f "./server_bin/server_linux" ]; then
+    chmod +x ./server_bin/server_linux
+    ./server_bin/server_linux &
+elif [ -f "./thumbdrive_runner.py" ]; then
+    echo "[ThumbDrive] Launching python thumbdrive_runner.py..."
+    python3 ./thumbdrive_runner.py
+else
+    echo "==================================================================="
+    echo "ERROR: ./server_bin/server_linux was not found!"
+    echo "==================================================================="
+    read -p "Press Enter to exit..."
+fi
 """
 
 DEFAULT_README_TXT = """===================================================================
