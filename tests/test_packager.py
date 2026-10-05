@@ -87,6 +87,35 @@ class TestPackageThumbdrive(unittest.TestCase):
         self.assertIn("active_wallpaper", data)
         self.assertEqual(data["active_wallpaper"], os.path.join("wallpapers", "wp1.webp"))
 
+    def test_package_thumbdrive_wallpaper_filtering(self):
+        """
+        Tests that package_thumbdrive copies ONLY .webp wallpaper files,
+        ignoring .png, .zip, .pdf, or other non-.webp files in wallpaper_dir.
+        """
+        # Add non-.webp files to wallpaper_dir
+        (self.wallpaper_dir / "uncompressed.png").write_bytes(b"PNG_DATA")
+        (self.wallpaper_dir / "archive.zip").write_bytes(b"ZIP_DATA")
+        (self.wallpaper_dir / "access.pdf").write_bytes(b"PDF_DATA")
+
+        args = [
+            "--output", str(self.output_dir),
+            "--audio-dir", str(self.audio_dir),
+            "--wallpaper-dir", str(self.wallpaper_dir),
+            "--bin-dir", str(self.bin_dir)
+        ]
+
+        result = package_thumbdrive.main(args)
+        self.assertEqual(result, 0)
+
+        target_wp_dir = self.output_dir / "assets" / "wallpapers"
+        copied_files = sorted([f.name for f in target_wp_dir.iterdir() if f.is_file()])
+
+        # Should only contain .webp files
+        self.assertEqual(copied_files, ["wp1.webp", "wp2.webp"])
+        self.assertNotIn("uncompressed.png", copied_files)
+        self.assertNotIn("archive.zip", copied_files)
+        self.assertNotIn("access.pdf", copied_files)
+
 
 if __name__ == "__main__":
     unittest.main()

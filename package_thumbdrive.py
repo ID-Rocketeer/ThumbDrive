@@ -120,19 +120,20 @@ def main(args=None):
                             pass
 
     # 4. Copy audio files if audio_dir provided
+    SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac", ".opus", ".wma"}
     if parsed.audio_dir:
         src_audio = pathlib.Path(parsed.audio_dir).resolve()
         if src_audio.exists() and src_audio.is_dir():
             for item in src_audio.iterdir():
-                if item.is_file() and not item.name.startswith("."):
+                if item.is_file() and not item.name.startswith(".") and item.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS:
                     shutil.copy2(item, assets_dir / item.name)
 
-    # 5. Copy wallpaper files if wallpaper_dir provided
+    # 5. Copy wallpaper files if wallpaper_dir provided (strictly .webp extension)
     if parsed.wallpaper_dir:
         src_wallpapers = pathlib.Path(parsed.wallpaper_dir).resolve()
         if src_wallpapers.exists() and src_wallpapers.is_dir():
             for item in src_wallpapers.iterdir():
-                if item.is_file() and not item.name.startswith("."):
+                if item.is_file() and not item.name.startswith(".") and item.suffix.lower() == ".webp":
                     shutil.copy2(item, wallpapers_dir / item.name)
 
     # 6. Initialize current_wallpaper.json if wallpapers exist
