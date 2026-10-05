@@ -12,6 +12,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 import webbrowser
 
 # Add adjacent project directories to sys.path for local un-frozen execution if needed
@@ -28,9 +29,9 @@ except ImportError:
     PaperHanger = None
 
 try:
-    from audio_server.__main__ import run_server
+    from audio_server.server import create_server_instance
 except ImportError:
-    run_server = None
+    create_server_instance = None
 
 
 def wait_for_server_and_open_browser(host: str, port: int, timeout: float = 10.0) -> bool:
@@ -94,6 +95,26 @@ def parse_args(args=None):
     return parser.parse_args(args)
 
 
+def run_server(target_dir: pathlib.Path, host: str = "127.0.0.1", port: int = 8000):
+    if create_server_instance is None:
+        raise ImportError("ERROR: Halloween audio_server module not found.")
+
+    server, assigned_port = create_server_instance(
+        audio_dir=str(target_dir),
+        host=host,
+        port=port
+    )
+    print(f"[ThumbDrive] Audio Server listening on http://{host}:{assigned_port}")
+    print(f"[ThumbDrive] Hosting audio files from: {target_dir}")
+    print("Press Ctrl+C to stop.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping audio server...")
+        server.shutdown()
+        server.server_close()
+
+
 def main(args=None):
     parsed = parse_args(args)
     
@@ -130,12 +151,20 @@ def main(args=None):
     browser_thread.start()
 
     # 3. Start Halloween Audio Server in the main thread
-    if run_server is None:
-        sys.stderr.write("ERROR: Halloween audio_server module not found.\n")
-        sys.exit(1)
-
-    run_server(target_dir=str(assets_path), host=parsed.host, port=parsed.port)
+    run_server(target_dir=assets_path, host=parsed.host, port=parsed.port)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        sys.stderr.write("\n===================================================\n")
+        sys.stderr.write("FATAL ERROR IN THUMBDRIVE RUNNER:\n")
+        sys.stderr.write(f"{exc}\n")
+        traceback.print_exc()
+        sys.stderr.write("===================================================\n")
+        try:
+            input("Press Enter to exit...")
+        except Exception:
+            pass
+        sys.exit(1)

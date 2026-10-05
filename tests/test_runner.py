@@ -56,9 +56,9 @@ class TestSocketPolling(unittest.TestCase):
 
 class TestRunnerOrchestration(unittest.TestCase):
     @patch("thumbdrive_runner.PaperHanger")
-    @patch("thumbdrive_runner.run_server")
+    @patch("thumbdrive_runner.create_server_instance")
     @patch("thumbdrive_runner.threading.Thread")
-    def test_main_orchestration(self, mock_thread_cls, mock_run_server, mock_paperhanger_cls):
+    def test_main_orchestration(self, mock_thread_cls, mock_create_server, mock_paperhanger_cls):
         """
         Tests that main() initializes PaperHanger on assets/, spawns background threads,
         and starts the audio server on assets/.
@@ -73,16 +73,19 @@ class TestRunnerOrchestration(unittest.TestCase):
             mock_thread_instance = MagicMock()
             mock_thread_cls.return_value = mock_thread_instance
 
+            mock_server_inst = MagicMock()
+            mock_create_server.return_value = (mock_server_inst, 8000)
+
             with patch("pathlib.Path.cwd", return_value=tmp_path):
                 thumbdrive_runner.main(["--port", "8000"])
 
             # Verify PaperHanger thread and browser thread creation
             self.assertGreaterEqual(mock_thread_cls.call_count, 2)
-            # Verify run_server called with assets directory
-            mock_run_server.assert_called_once()
-            _, kwargs = mock_run_server.call_args
+            # Verify create_server_instance called with assets directory
+            mock_create_server.assert_called_once()
+            _, kwargs = mock_create_server.call_args
             self.assertEqual(kwargs.get("port"), 8000)
-            self.assertEqual(pathlib.Path(kwargs.get("target_dir")).resolve(), assets_dir.resolve())
+            self.assertEqual(pathlib.Path(kwargs.get("audio_dir")).resolve(), assets_dir.resolve())
 
 
 if __name__ == "__main__":

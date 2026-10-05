@@ -18,10 +18,13 @@ jobs:
         include:
           - os: windows-latest
             output_name: server_win.exe
+            sep: ';'
           - os: ubuntu-latest
             output_name: server_linux
+            sep: ':'
           - os: macos-latest
             output_name: server_mac
+            sep: ':'
 
     steps:
       - name: Checkout ThumbDrive Repository
@@ -41,11 +44,11 @@ jobs:
       - name: Install PyInstaller and Build Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pillow
+          pip install pyinstaller pillow watchdog
 
       - name: Build Standalone Binary with PyInstaller
         run: |
-          pyinstaller --onefile --name ${{ matrix.output_name }} --paths ../PaperHanger --paths ../Halloween thumbdrive_runner.py
+          pyinstaller --onefile --name ${{ matrix.output_name }} --paths ../PaperHanger --paths ../Halloween --add-data "../Halloween/static${{ matrix.sep }}static" thumbdrive_runner.py
         shell: bash
 
       - name: Upload Executable Artifact
