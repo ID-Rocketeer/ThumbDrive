@@ -37,7 +37,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/PaperHanger
           path: PaperHanger
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.EXTRA_REPOS_PAT }}
         continue-on-error: true
 
       - name: Checkout Sister Repository Halloween
@@ -45,7 +45,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/Halloween
           path: Halloween
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.EXTRA_REPOS_PAT }}
         continue-on-error: true
 
       - name: Set up Python
