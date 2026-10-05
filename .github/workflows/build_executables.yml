@@ -1,0 +1,55 @@
+name: Build Portable Executables
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Executable on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            output_name: server_win.exe
+          - os: ubuntu-latest
+            output_name: server_linux
+          - os: macos-latest
+            output_name: server_mac
+
+    steps:
+      - name: Checkout ThumbDrive Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Sister Repositories (PaperHanger & Halloween)
+        run: |
+          git clone https://github.com/${{ github.repository_owner }}/PaperHanger.git ../PaperHanger || true
+          git clone https://github.com/${{ github.repository_owner }}/Halloween.git ../Halloween || true
+        shell: bash
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PyInstaller and Build Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pillow
+
+      - name: Build Standalone Binary with PyInstaller
+        run: |
+          pyinstaller --onefile --name ${{ matrix.output_name }} --paths ../PaperHanger --paths ../Halloween thumbdrive_runner.py
+        shell: bash
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output_name }}
+          path: dist/${{ matrix.output_name }}

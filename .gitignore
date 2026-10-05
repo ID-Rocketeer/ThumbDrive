@@ -1,0 +1,13 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Build & packaging output
+dist/
+build/
+*.spec
+
+# OS files
+.DS_Store
+Thumbs.db
