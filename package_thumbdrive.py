@@ -2,7 +2,8 @@
 """
 Package ThumbDrive: Assembles a complete, user-facing USB drive file structure.
 Enforces strict verification on all required inputs (audio files, .webp wallpapers,
-and cross-platform executables). Fails immediately if any required component is missing.
+title.json config files, and cross-platform executables).
+Fails immediately if any required component is missing.
 """
 
 import argparse
@@ -78,12 +79,16 @@ def parse_args(args=None):
         required=True,
         help="Source directory containing the 3 pre-compiled executables (server_win.exe, server_mac, server_linux)"
     )
+    parser.add_argument(
+        "-t", "--title-file",
+        help="Optional source path to title.json file (e.g. /path/to/title.json)"
+    )
     return parser.parse_args(args)
 
 
-def validate_inputs(audio_dir_path: pathlib.Path, wallpaper_dir_path: pathlib.Path, bin_dir_path: pathlib.Path):
+def validate_inputs(audio_dir_path: pathlib.Path, wallpaper_dir_path: pathlib.Path, bin_dir_path: pathlib.Path, title_file_path: pathlib.Path | None = None):
     """
-    Strictly verifies that source directories exist and contain valid assets.
+    Strictly verifies that source directories and optional title file exist and contain valid assets.
     Exits with error if validation fails.
     """
     # 1. Validate Executables Directory
@@ -127,6 +132,12 @@ def validate_inputs(audio_dir_path: pathlib.Path, wallpaper_dir_path: pathlib.Pa
         sys.stderr.write(f"ERROR: No valid .webp wallpaper files found in '{wallpaper_dir_path}'.\n")
         sys.exit(1)
 
+    # 4. Validate Title File if specified
+    if title_file_path is not None:
+        if not title_file_path.exists() or not title_file_path.is_file():
+            sys.stderr.write(f"ERROR: Title file '{title_file_path}' does not exist or is not a valid file.\n")
+            sys.exit(1)
+
     return audio_files, wallpaper_files
 
 
@@ -137,17 +148,18 @@ def main(args=None):
     audio_dir_path = pathlib.Path(parsed.audio_dir).resolve()
     wallpaper_dir_path = pathlib.Path(parsed.wallpaper_dir).resolve()
     bin_dir_path = pathlib.Path(parsed.bin_dir).resolve()
+    title_file_path = pathlib.Path(parsed.title_file).resolve() if parsed.title_file else None
 
     # Perform strict validation upfront
-    audio_files, wallpaper_files = validate_inputs(audio_dir_path, wallpaper_dir_path, bin_dir_path)
+    audio_files, wallpaper_files = validate_inputs(audio_dir_path, wallpaper_dir_path, bin_dir_path, title_file_path)
 
     # Prepare target directory paths
-    assets_dir = output_dir / "assets"
-    wallpapers_dir = assets_dir / "wallpapers"
+    target_assets_dir = output_dir / "assets"
+    wallpapers_dir = target_assets_dir / "wallpapers"
     target_bin_dir = output_dir / "server_bin"
 
     # 1. Create target output directories
-    assets_dir.mkdir(parents=True, exist_ok=True)
+    target_assets_dir.mkdir(parents=True, exist_ok=True)
     wallpapers_dir.mkdir(parents=True, exist_ok=True)
     target_bin_dir.mkdir(parents=True, exist_ok=True)
 
@@ -182,21 +194,26 @@ def main(args=None):
 
     # 4. Copy validated audio files to assets/
     for item in audio_files:
-        shutil.copy2(item, assets_dir / item.name)
+        shutil.copy2(item, target_assets_dir / item.name)
 
-    # 5. Copy validated .webp wallpapers to assets/wallpapers/
+    # 5. Copy title.json if specified via --title-file
+    if title_file_path:
+        shutil.copy2(title_file_path, target_assets_dir / "title.json")
+
+    # 6. Copy validated .webp wallpapers to assets/wallpapers/
     for item in wallpaper_files:
         shutil.copy2(item, wallpapers_dir / item.name)
 
-    # 6. Initialize current_wallpaper.json with first naturally sorted .webp file
+    # 7. Initialize current_wallpaper.json with first naturally sorted .webp file if not already present
     sorted_wp_names = sorted([f.name for f in wallpaper_files])
     first_wp = os.path.join("wallpapers", sorted_wp_names[0])
     json_data = {
         "active_wallpaper": first_wp,
         "updated_at": 1791145900
     }
-    json_file = assets_dir / "current_wallpaper.json"
-    json_file.write_text(json.dumps(json_data, indent=2) + "\n", encoding="utf-8")
+    json_file = target_assets_dir / "current_wallpaper.json"
+    if not json_file.exists():
+        json_file.write_text(json.dumps(json_data, indent=2) + "\n", encoding="utf-8")
 
     print(f"ThumbDrive USB image successfully generated at: {output_dir}")
     return 0

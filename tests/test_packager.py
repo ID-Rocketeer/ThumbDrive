@@ -35,6 +35,9 @@ class TestPackageThumbdrive(unittest.TestCase):
         (self.bin_dir / "server_mac").write_bytes(b"BIN_MAC")
         (self.bin_dir / "server_linux").write_bytes(b"BIN_LINUX")
 
+        self.title_file = self.base_dir / "title.json"
+        self.title_file.write_text('{"title": "Custom Spooky Server"}', encoding="utf-8")
+
         self.output_dir = self.base_dir / "target_output"
 
     def tearDown(self):
@@ -163,6 +166,42 @@ class TestPackageThumbdrive(unittest.TestCase):
             "--audio-dir", str(self.audio_dir),
             "--wallpaper-dir", str(empty_wp),
             "--bin-dir", str(self.bin_dir)
+        ]
+
+        with self.assertRaises((SystemExit, ValueError)):
+            package_thumbdrive.main(args)
+
+    def test_package_thumbdrive_title_file_option(self):
+        """
+        Tests that package_thumbdrive copies title.json to target assets/title.json when --title-file is passed.
+        """
+        args = [
+            "--output", str(self.output_dir),
+            "--audio-dir", str(self.audio_dir),
+            "--wallpaper-dir", str(self.wallpaper_dir),
+            "--bin-dir", str(self.bin_dir),
+            "--title-file", str(self.title_file)
+        ]
+
+        result = package_thumbdrive.main(args)
+        self.assertEqual(result, 0)
+
+        target_title = self.output_dir / "assets" / "title.json"
+        self.assertTrue(target_title.exists())
+        self.assertEqual(target_title.read_text(encoding="utf-8"), '{"title": "Custom Spooky Server"}')
+
+    def test_package_thumbdrive_invalid_title_file_fails(self):
+        """
+        Tests that package_thumbdrive fails if --title-file points to a non-existent file.
+        """
+        non_existent_title = self.base_dir / "non_existent_title.json"
+
+        args = [
+            "--output", str(self.output_dir),
+            "--audio-dir", str(self.audio_dir),
+            "--wallpaper-dir", str(self.wallpaper_dir),
+            "--bin-dir", str(self.bin_dir),
+            "--title-file", str(non_existent_title)
         ]
 
         with self.assertRaises((SystemExit, ValueError)):
