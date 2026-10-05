@@ -2,7 +2,8 @@
 """
 ThumbDrive Runner: Entry-point application for the self-contained portable USB Audio Web Server.
 Orchestrates PaperHanger (background wallpaper swapper) and Halloween (audio web server),
-and auto-launches the web browser once the socket is live.
+auto-launches the web browser once the socket is live, and automatically shuts down
+when all browser windows/tabs are closed.
 """
 
 import argparse
@@ -29,9 +30,68 @@ except ImportError:
     PaperHanger = None
 
 try:
-    from audio_server.server import create_server_instance
+    from audio_server.server import create_server_instance, AudioServerRequestHandler
 except ImportError:
     create_server_instance = None
+    AudioServerRequestHandler = None
+
+
+class SocketConnectionTracker:
+    def __init__(self):
+        self.active_sockets = 0
+        self.lock = threading.Lock()
+        self.has_connected = False
+        self.idle_since = None
+
+    def on_socket_connect(self):
+        with self.lock:
+            self.active_sockets += 1
+            self.has_connected = True
+            self.idle_since = None
+
+    def on_socket_disconnect(self):
+        with self.lock:
+            self.active_sockets = max(0, self.active_sockets - 1)
+            if self.active_sockets == 0 and self.has_connected:
+                self.idle_since = time.time()
+
+    def check_and_shutdown_if_idle(self, server, idle_grace_seconds: float = 8.0) -> bool:
+        with self.lock:
+            if self.has_connected and self.active_sockets == 0:
+                if self.idle_since is not None and (time.time() - self.idle_since) >= idle_grace_seconds:
+                    sys.stdout.write("\n[ThumbDrive] All browser windows closed. Auto-shutting down server...\n")
+                    try:
+                        server.shutdown()
+                    except Exception:
+                        pass
+                    return True
+        return False
+
+
+global_tracker = SocketConnectionTracker()
+
+
+def install_socket_hooks():
+    if AudioServerRequestHandler is None:
+        return
+
+    if not hasattr(AudioServerRequestHandler, "_thumbdrive_orig_setup"):
+        original_setup = AudioServerRequestHandler.setup
+        original_finish = AudioServerRequestHandler.finish
+
+        def patched_setup(self):
+            original_setup(self)
+            global_tracker.on_socket_connect()
+
+        def patched_finish(self):
+            try:
+                original_finish(self)
+            finally:
+                global_tracker.on_socket_disconnect()
+
+        AudioServerRequestHandler._thumbdrive_orig_setup = original_setup
+        AudioServerRequestHandler.setup = patched_setup
+        AudioServerRequestHandler.finish = patched_finish
 
 
 def wait_for_server_and_open_browser(host: str, port: int, timeout: float = 10.0) -> bool:
@@ -99,6 +159,8 @@ def run_server(target_dir: pathlib.Path, host: str = "127.0.0.1", port: int = 80
     if create_server_instance is None:
         raise ImportError("ERROR: Halloween audio_server module not found.")
 
+    install_socket_hooks()
+
     server, assigned_port = create_server_instance(
         audio_dir=str(target_dir),
         host=host,
@@ -106,7 +168,17 @@ def run_server(target_dir: pathlib.Path, host: str = "127.0.0.1", port: int = 80
     )
     print(f"[ThumbDrive] Audio Server listening on http://{host}:{assigned_port}")
     print(f"[ThumbDrive] Hosting audio files from: {target_dir}")
-    print("Press Ctrl+C to stop.")
+    print("Press Ctrl+C or close browser to stop.")
+
+    # Start auto-shutdown monitor loop
+    def monitor_loop():
+        while True:
+            time.sleep(1.0)
+            if global_tracker.check_and_shutdown_if_idle(server, idle_grace_seconds=8.0):
+                break
+
+    threading.Thread(target=monitor_loop, daemon=True, name="AutoShutdownMonitor").start()
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:

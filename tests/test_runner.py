@@ -121,5 +121,29 @@ class TestRunnerOrchestration(unittest.TestCase):
             self.assertEqual(pathlib.Path(kwargs.get("audio_dir")).resolve(), assets_dir.resolve())
 
 
+class TestConnectionTracker(unittest.TestCase):
+    def test_connection_counter_and_auto_shutdown(self):
+        """
+        Tests that setup and finish hooks update active_sockets,
+        and that monitor_auto_shutdown triggers server.shutdown() when active_sockets drops to 0.
+        """
+        self.assertIsNotNone(thumbdrive_runner, "thumbdrive_runner module must exist")
+        self.assertTrue(hasattr(thumbdrive_runner, "SocketConnectionTracker"), "SocketConnectionTracker must exist")
+
+        tracker = thumbdrive_runner.SocketConnectionTracker()
+        tracker.on_socket_connect()
+        self.assertTrue(tracker.has_connected)
+        self.assertEqual(tracker.active_sockets, 1)
+
+        tracker.on_socket_disconnect()
+        self.assertEqual(tracker.active_sockets, 0)
+
+        # Mock server instance to verify shutdown call
+        mock_server = MagicMock()
+        shutdown_triggered = tracker.check_and_shutdown_if_idle(mock_server, idle_grace_seconds=0.0)
+        self.assertTrue(shutdown_triggered)
+        mock_server.shutdown.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
