@@ -29,12 +29,24 @@ jobs:
     steps:
       - name: Checkout ThumbDrive Repository
         uses: actions/checkout@v4
+        with:
+          path: ThumbDrive
 
-      - name: Checkout Sister Repositories (PaperHanger & Halloween)
-        run: |
-          git clone https://github.com/${{ github.repository_owner }}/PaperHanger.git ../PaperHanger || true
-          git clone https://github.com/${{ github.repository_owner }}/Halloween.git ../Halloween || true
-        shell: bash
+      - name: Checkout Sister Repository PaperHanger
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/PaperHanger
+          path: PaperHanger
+          token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Checkout Sister Repository Halloween
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/Halloween
+          path: Halloween
+          token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -48,6 +60,7 @@ jobs:
 
       - name: Build Standalone Binary with PyInstaller
         run: |
+          cd ThumbDrive
           pyinstaller --onefile --name ${{ matrix.output_name }} --paths ../PaperHanger --paths ../Halloween --add-data "../Halloween/static${{ matrix.sep }}static" thumbdrive_runner.py
         shell: bash
 
@@ -55,4 +68,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.output_name }}
-          path: dist/${{ matrix.output_name }}
+          path: ThumbDrive/dist/${{ matrix.output_name }}
