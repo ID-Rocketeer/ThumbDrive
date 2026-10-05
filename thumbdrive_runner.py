@@ -75,6 +75,9 @@ def install_socket_hooks():
     if AudioServerRequestHandler is None:
         return
 
+    # Set HTTP socket timeout so idle Keep-Alive connections close fast when tab is closed
+    AudioServerRequestHandler.timeout = 1.5
+
     if not hasattr(AudioServerRequestHandler, "_thumbdrive_orig_setup"):
         original_setup = AudioServerRequestHandler.setup
         original_finish = AudioServerRequestHandler.finish
@@ -173,8 +176,8 @@ def run_server(target_dir: pathlib.Path, host: str = "127.0.0.1", port: int = 80
     # Start auto-shutdown monitor loop
     def monitor_loop():
         while True:
-            time.sleep(1.0)
-            if global_tracker.check_and_shutdown_if_idle(server, idle_grace_seconds=8.0):
+            time.sleep(0.5)
+            if global_tracker.check_and_shutdown_if_idle(server, idle_grace_seconds=3.0):
                 break
 
     threading.Thread(target=monitor_loop, daemon=True, name="AutoShutdownMonitor").start()
