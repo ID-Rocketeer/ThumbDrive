@@ -78,6 +78,50 @@ def install_socket_hooks():
     # Set HTTP socket timeout so idle Keep-Alive connections close fast when tab is closed
     AudioServerRequestHandler.timeout = 1.5
 
+    # Patch handle_api_events to use a 1.0s ping timeout instead of 15s
+    # so tab closure (broken pipe) is detected on the very next 1s tick
+    if hasattr(AudioServerRequestHandler, "handle_api_events") and not hasattr(AudioServerRequestHandler, "_thumbdrive_orig_handle_api_events"):
+        import queue
+        from audio_server.server import _sse_clients, _sse_clients_lock
+
+        def fast_handle_api_events(self):
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache, no-transform")
+                self.send_header("Connection", "keep-alive")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+
+                q = queue.Queue()
+                with _sse_clients_lock:
+                    _sse_clients.add(q)
+
+                try:
+                    self.wfile.write(b"data: {\"type\": \"connected\"}\n\n")
+                    self.wfile.flush()
+
+                    while True:
+                        try:
+                            msg = q.get(timeout=1.0)
+                            self.wfile.write(f"data: {msg}\n\n".encode("utf-8"))
+                            self.wfile.flush()
+                        except queue.Empty:
+                            self.wfile.write(b": ping\n\n")
+                            self.wfile.flush()
+                except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
+                    pass
+                finally:
+                    with _sse_clients_lock:
+                        _sse_clients.discard(q)
+            except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
+                pass
+            except Exception as e:
+                self.send_error(500, str(e))
+
+        AudioServerRequestHandler._thumbdrive_orig_handle_api_events = AudioServerRequestHandler.handle_api_events
+        AudioServerRequestHandler.handle_api_events = fast_handle_api_events
+
     if not hasattr(AudioServerRequestHandler, "_thumbdrive_orig_setup"):
         original_setup = AudioServerRequestHandler.setup
         original_finish = AudioServerRequestHandler.finish
