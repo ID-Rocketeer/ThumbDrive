@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Package ThumbDrive: Assembles a complete, user-facing USB drive file structure
-containing launchers, standalone server executables, and media assets.
+Package ThumbDrive: Assembles a complete, user-facing USB drive file structure.
+Enforces strict verification on all required inputs (audio files, .webp wallpapers,
+and cross-platform executables). Fails immediately if any required component is missing.
 """
 
 import argparse
@@ -11,63 +12,27 @@ import pathlib
 import shutil
 import sys
 
+SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac", ".opus", ".wma"}
+REQUIRED_BINARIES = ["server_win.exe", "server_mac", "server_linux"]
 
 DEFAULT_WIN_BAT = """@echo off
 title ThumbDrive Audio Player
 cd /d "%~dp0"
-
-if exist "server_bin\\server_win.exe" (
-    start "" "server_bin\\server_win.exe"
-) else if exist "thumbdrive_runner.py" (
-    echo [ThumbDrive] Executable server_bin\\server_win.exe not found.
-    echo [ThumbDrive] Launching python thumbdrive_runner.py fallback...
-    python thumbdrive_runner.py
-) else (
-    echo.
-    echo ===================================================================
-    echo ERROR: 'server_bin\\server_win.exe' was not found!
-    echo ===================================================================
-    echo Please ensure you have downloaded the compiled executables into
-    echo server_bin\\ or assembled the drive using package_thumbdrive.py.
-    echo.
-    pause
-)
+start "" "server_bin\\server_win.exe"
 """
 
 DEFAULT_MAC_COMMAND = """#!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
-
-if [ -f "./server_bin/server_mac" ]; then
-    chmod +x ./server_bin/server_mac
-    ./server_bin/server_mac &
-elif [ -f "./thumbdrive_runner.py" ]; then
-    echo "[ThumbDrive] Launching python thumbdrive_runner.py..."
-    python3 ./thumbdrive_runner.py
-else
-    echo "==================================================================="
-    echo "ERROR: ./server_bin/server_mac was not found!"
-    echo "==================================================================="
-    read -p "Press Enter to exit..."
-fi
+chmod +x ./server_bin/server_mac
+./server_bin/server_mac &
 """
 
 DEFAULT_LINUX_SH = """#!/bin/bash
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR"
-
-if [ -f "./server_bin/server_linux" ]; then
-    chmod +x ./server_bin/server_linux
-    ./server_bin/server_linux &
-elif [ -f "./thumbdrive_runner.py" ]; then
-    echo "[ThumbDrive] Launching python thumbdrive_runner.py..."
-    python3 ./thumbdrive_runner.py
-else
-    echo "==================================================================="
-    echo "ERROR: ./server_bin/server_linux was not found!"
-    echo "==================================================================="
-    read -p "Press Enter to exit..."
-fi
+chmod +x ./server_bin/server_linux
+./server_bin/server_linux &
 """
 
 DEFAULT_README_TXT = """===================================================================
@@ -90,7 +55,9 @@ Quick Start Instructions:
 
 
 def parse_args(args=None):
-    parser = argparse.ArgumentParser(description="Assemble ThumbDrive USB layout into target directory")
+    parser = argparse.ArgumentParser(
+        description="Assemble ThumbDrive USB layout into target directory with strict input validation."
+    )
     parser.add_argument(
         "-o", "--output",
         required=True,
@@ -98,31 +65,91 @@ def parse_args(args=None):
     )
     parser.add_argument(
         "-a", "--audio-dir",
+        required=True,
         help="Source directory containing protected audio files"
     )
     parser.add_argument(
         "-w", "--wallpaper-dir",
+        required=True,
         help="Source directory containing protected .webp wallpaper files"
     )
     parser.add_argument(
         "-b", "--bin-dir",
-        help="Source directory containing pre-compiled executables (server_win.exe, server_mac, server_linux)"
+        required=True,
+        help="Source directory containing the 3 pre-compiled executables (server_win.exe, server_mac, server_linux)"
     )
     return parser.parse_args(args)
+
+
+def validate_inputs(audio_dir_path: pathlib.Path, wallpaper_dir_path: pathlib.Path, bin_dir_path: pathlib.Path):
+    """
+    Strictly verifies that source directories exist and contain valid assets.
+    Exits with error if validation fails.
+    """
+    # 1. Validate Executables Directory
+    if not bin_dir_path.exists() or not bin_dir_path.is_dir():
+        sys.stderr.write(f"ERROR: Executables directory '{bin_dir_path}' does not exist or is not a directory.\n")
+        sys.exit(1)
+
+    missing_bins = [exe for exe in REQUIRED_BINARIES if not (bin_dir_path / exe).is_file()]
+    if missing_bins:
+        sys.stderr.write(
+            f"ERROR: Missing required executable(s) in '{bin_dir_path}': {', '.join(missing_bins)}\n"
+            f"All three compiled binaries ({', '.join(REQUIRED_BINARIES)}) are required to assemble the image.\n"
+        )
+        sys.exit(1)
+
+    # 2. Validate Audio Directory
+    if not audio_dir_path.exists() or not audio_dir_path.is_dir():
+        sys.stderr.write(f"ERROR: Audio directory '{audio_dir_path}' does not exist or is not a directory.\n")
+        sys.exit(1)
+
+    audio_files = [
+        f for f in audio_dir_path.iterdir()
+        if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
+    ]
+    if not audio_files:
+        sys.stderr.write(
+            f"ERROR: No supported audio files ({', '.join(sorted(SUPPORTED_AUDIO_EXTENSIONS))}) found in '{audio_dir_path}'.\n"
+        )
+        sys.exit(1)
+
+    # 3. Validate Wallpaper Directory
+    if not wallpaper_dir_path.exists() or not wallpaper_dir_path.is_dir():
+        sys.stderr.write(f"ERROR: Wallpaper directory '{wallpaper_dir_path}' does not exist or is not a directory.\n")
+        sys.exit(1)
+
+    wallpaper_files = [
+        f for f in wallpaper_dir_path.iterdir()
+        if f.is_file() and not f.name.startswith(".") and f.suffix.lower() == ".webp"
+    ]
+    if not wallpaper_files:
+        sys.stderr.write(f"ERROR: No valid .webp wallpaper files found in '{wallpaper_dir_path}'.\n")
+        sys.exit(1)
+
+    return audio_files, wallpaper_files
 
 
 def main(args=None):
     parsed = parse_args(args)
 
     output_dir = pathlib.Path(parsed.output).resolve()
+    audio_dir_path = pathlib.Path(parsed.audio_dir).resolve()
+    wallpaper_dir_path = pathlib.Path(parsed.wallpaper_dir).resolve()
+    bin_dir_path = pathlib.Path(parsed.bin_dir).resolve()
+
+    # Perform strict validation upfront
+    audio_files, wallpaper_files = validate_inputs(audio_dir_path, wallpaper_dir_path, bin_dir_path)
+
+    # Prepare target directory paths
     assets_dir = output_dir / "assets"
     wallpapers_dir = assets_dir / "wallpapers"
-    bin_dir = output_dir / "server_bin"
+    target_bin_dir = output_dir / "server_bin"
 
     # 1. Create target output directories
     assets_dir.mkdir(parents=True, exist_ok=True)
     wallpapers_dir.mkdir(parents=True, exist_ok=True)
-    bin_dir.mkdir(parents=True, exist_ok=True)
+    target_bin_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. Write root launcher scripts and README.txt
     (output_dir / "Start_Windows.bat").write_text(DEFAULT_WIN_BAT, encoding="utf-8")
@@ -143,47 +170,33 @@ def main(args=None):
 
     (output_dir / "README.txt").write_text(DEFAULT_README_TXT, encoding="utf-8")
 
-    # 3. Copy compiled executables if bin_dir provided
-    if parsed.bin_dir:
-        src_bin = pathlib.Path(parsed.bin_dir).resolve()
-        if src_bin.exists() and src_bin.is_dir():
-            for exe_name in ["server_win.exe", "server_mac", "server_linux"]:
-                src_exe = src_bin / exe_name
-                if src_exe.exists():
-                    shutil.copy2(src_exe, bin_dir / exe_name)
-                    if not exe_name.endswith(".exe"):
-                        try:
-                            (bin_dir / exe_name).chmod(0o755)
-                        except OSError:
-                            pass
+    # 3. Copy validated executables to server_bin/
+    for exe_name in REQUIRED_BINARIES:
+        src_exe = bin_dir_path / exe_name
+        shutil.copy2(src_exe, target_bin_dir / exe_name)
+        if not exe_name.endswith(".exe"):
+            try:
+                (target_bin_dir / exe_name).chmod(0o755)
+            except OSError:
+                pass
 
-    # 4. Copy audio files if audio_dir provided
-    SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac", ".opus", ".wma"}
-    if parsed.audio_dir:
-        src_audio = pathlib.Path(parsed.audio_dir).resolve()
-        if src_audio.exists() and src_audio.is_dir():
-            for item in src_audio.iterdir():
-                if item.is_file() and not item.name.startswith(".") and item.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS:
-                    shutil.copy2(item, assets_dir / item.name)
+    # 4. Copy validated audio files to assets/
+    for item in audio_files:
+        shutil.copy2(item, assets_dir / item.name)
 
-    # 5. Copy wallpaper files if wallpaper_dir provided (strictly .webp extension)
-    if parsed.wallpaper_dir:
-        src_wallpapers = pathlib.Path(parsed.wallpaper_dir).resolve()
-        if src_wallpapers.exists() and src_wallpapers.is_dir():
-            for item in src_wallpapers.iterdir():
-                if item.is_file() and not item.name.startswith(".") and item.suffix.lower() == ".webp":
-                    shutil.copy2(item, wallpapers_dir / item.name)
+    # 5. Copy validated .webp wallpapers to assets/wallpapers/
+    for item in wallpaper_files:
+        shutil.copy2(item, wallpapers_dir / item.name)
 
-    # 6. Initialize current_wallpaper.json if wallpapers exist
-    wallpaper_files = sorted([f.name for f in wallpapers_dir.iterdir() if f.is_file() and f.suffix.lower() == ".webp"])
-    if wallpaper_files:
-        first_wp = os.path.join("wallpapers", wallpaper_files[0])
-        json_data = {
-            "active_wallpaper": first_wp,
-            "updated_at": 1791145900
-        }
-        json_file = assets_dir / "current_wallpaper.json"
-        json_file.write_text(json.dumps(json_data, indent=2) + "\n", encoding="utf-8")
+    # 6. Initialize current_wallpaper.json with first naturally sorted .webp file
+    sorted_wp_names = sorted([f.name for f in wallpaper_files])
+    first_wp = os.path.join("wallpapers", sorted_wp_names[0])
+    json_data = {
+        "active_wallpaper": first_wp,
+        "updated_at": 1791145900
+    }
+    json_file = assets_dir / "current_wallpaper.json"
+    json_file.write_text(json.dumps(json_data, indent=2) + "\n", encoding="utf-8")
 
     print(f"ThumbDrive USB image successfully generated at: {output_dir}")
     return 0

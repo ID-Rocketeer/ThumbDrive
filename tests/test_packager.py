@@ -116,6 +116,58 @@ class TestPackageThumbdrive(unittest.TestCase):
         self.assertNotIn("archive.zip", copied_files)
         self.assertNotIn("access.pdf", copied_files)
 
+    def test_package_thumbdrive_missing_binary_fails(self):
+        """
+        Tests that package_thumbdrive fails if any of the 3 required binaries
+        (server_win.exe, server_mac, server_linux) is missing in bin_dir.
+        """
+        # Remove server_win.exe
+        (self.bin_dir / "server_win.exe").unlink()
+
+        args = [
+            "--output", str(self.output_dir),
+            "--audio-dir", str(self.audio_dir),
+            "--wallpaper-dir", str(self.wallpaper_dir),
+            "--bin-dir", str(self.bin_dir)
+        ]
+
+        with self.assertRaises((SystemExit, ValueError)):
+            package_thumbdrive.main(args)
+
+    def test_package_thumbdrive_empty_audio_dir_fails(self):
+        """
+        Tests that package_thumbdrive fails if audio_dir contains no valid audio files.
+        """
+        empty_audio = self.base_dir / "empty_audio"
+        empty_audio.mkdir()
+
+        args = [
+            "--output", str(self.output_dir),
+            "--audio-dir", str(empty_audio),
+            "--wallpaper-dir", str(self.wallpaper_dir),
+            "--bin-dir", str(self.bin_dir)
+        ]
+
+        with self.assertRaises((SystemExit, ValueError)):
+            package_thumbdrive.main(args)
+
+    def test_package_thumbdrive_empty_wallpaper_dir_fails(self):
+        """
+        Tests that package_thumbdrive fails if wallpaper_dir contains no .webp files.
+        """
+        empty_wp = self.base_dir / "empty_wp"
+        empty_wp.mkdir()
+
+        args = [
+            "--output", str(self.output_dir),
+            "--audio-dir", str(self.audio_dir),
+            "--wallpaper-dir", str(empty_wp),
+            "--bin-dir", str(self.bin_dir)
+        ]
+
+        with self.assertRaises((SystemExit, ValueError)):
+            package_thumbdrive.main(args)
+
 
 if __name__ == "__main__":
     unittest.main()
