@@ -115,6 +115,20 @@ def run_server(target_dir: pathlib.Path, host: str = "127.0.0.1", port: int = 80
         server.server_close()
 
 
+def find_available_port(host: str = "127.0.0.1", preferred_port: int = 8000) -> int:
+    """
+    Attempts to bind preferred_port. If occupied, lets the OS assign an available open port.
+    Returns the open port integer.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, preferred_port))
+            return preferred_port
+        except OSError:
+            s.bind((host, 0))
+            return s.getsockname()[1]
+
+
 def main(args=None):
     parsed = parse_args(args)
     
@@ -132,6 +146,11 @@ def main(args=None):
         sys.stderr.write(f"ERROR: Assets directory '{assets_path}' does not exist.\n")
         sys.exit(1)
 
+    # Determine dynamic open port (preferred 8000, fallback to OS assigned open port)
+    active_port = find_available_port(parsed.host, preferred_port=parsed.port)
+    if active_port != parsed.port:
+        sys.stdout.write(f"[ThumbDrive] Preferred port {parsed.port} in use. Dynamically assigned open port {active_port}.\n")
+
     # 1. Start PaperHanger background wallpaper rotation service in a daemon thread
     swapper_thread = threading.Thread(
         target=run_paperhanger_service,
@@ -144,14 +163,14 @@ def main(args=None):
     # 2. Start socket polling browser auto-launcher in a daemon thread
     browser_thread = threading.Thread(
         target=wait_for_server_and_open_browser,
-        args=(parsed.host, parsed.port),
+        args=(parsed.host, active_port),
         daemon=True,
         name="BrowserLauncherThread"
     )
     browser_thread.start()
 
     # 3. Start Halloween Audio Server in the main thread
-    run_server(target_dir=assets_path, host=parsed.host, port=parsed.port)
+    run_server(target_dir=assets_path, host=parsed.host, port=active_port)
 
 
 if __name__ == "__main__":
